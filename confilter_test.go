@@ -37,13 +37,12 @@ func BenchmarkJudge(b *testing.B) {
 
 }
 
-func createServer() (*ConfilterServer, error) {
-	config := new(ConfilterServerConfig)
+func createServer() (*Confilter, error) {
+	config := new(ConfilterConfig)
 	dicts := make(map[string]string)
 	dicts["aaa"] = "./data/aaa.txt"
 	dicts["bbb"] = "./data/bbb.txt"
 	config.Dictionaries = dicts
 
-	return CreateConfilterServer(config)
-
+	return CreateConfilter(config)
 }
