@@ -5,6 +5,7 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hanguofeng/config"
@@ -16,6 +17,10 @@ var (
 	c          *confilter.Confilter
 	configFile = flag.String("c", "confilter.conf", "the config file")
 	logger     loggo.Logger
+
+	cfgDictionaries map[string]string
+	cfgLogLevel     string
+	cfgListenAddr   string
 )
 
 func JudgeHandler(res http.ResponseWriter, req *http.Request) {
@@ -31,23 +36,34 @@ func JudgeHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	var err error
+
 	initLogger()
 
-	err := initConfig()
+	err = initConfig()
 	if nil != err {
-		logger.Errorf("fatal in init(initConfig),error:%s", err)
+		logger.Criticalf("fatal in init(initConfig),error:%s", err)
 		os.Exit(1)
 	}
 
-	initConfilter()
-	initHttp()
+	adjustLogLevel()
 
-	logger.Infof("Server start...")
-	http.ListenAndServe(":8080", nil)
+	err = initConfilter()
+	if nil != err {
+		logger.Criticalf("fatal in init(initConfilter),error:%s", err)
+		os.Exit(1)
+	}
+
+	logger.Infof("starting server,listen at <%s>", cfgListenAddr)
+	err = initHttp()
+	if nil != err {
+		logger.Criticalf("fatal in init(initHttp),error:%s", err)
+		os.Exit(1)
+	}
+
 }
 
 func initConfig() error {
-
 	conf, err := config.ReadDefault(*configFile)
 	if nil != err {
 		return err
@@ -66,32 +82,66 @@ func initConfig() error {
 		}
 		dicts[dictOpt] = dictFile
 	}
-	logger.Infof("dictionaries:%s", dicts)
-
+	//logLevel
+	loglevel, err := conf.String("server", "logLevel")
+	if nil != err {
+		loglevel = "UNSPECIFIED"
+	}
+	//listenAddr
+	listenAddr, err := conf.String("server", "listenAddr")
+	if nil != err {
+		listenAddr = ":80"
+	}
+	cfgDictionaries = dicts
+	cfgLogLevel = loglevel
+	cfgListenAddr = listenAddr
 	return nil
 
 }
 
 func initLogger() {
 	logger = loggo.GetLogger("confilter.server")
-	logger.SetLogLevel(loggo.DEBUG)
 }
 
-func initConfilter() {
+func adjustLogLevel() {
+	var level loggo.Level
+
+	switch strings.ToUpper(cfgLogLevel) {
+	case "UNSPECIFIED":
+		level = loggo.UNSPECIFIED
+	case "TRACE":
+		level = loggo.TRACE
+	case "DEBUG":
+		level = loggo.DEBUG
+	case "INFO":
+		level = loggo.INFO
+	case "WARNING":
+		level = loggo.WARNING
+	case "ERROR":
+		level = loggo.ERROR
+	case "CRITICAL":
+		level = loggo.CRITICAL
+	default:
+		level = loggo.UNSPECIFIED
+	}
+	logger.SetLogLevel(level)
+}
+
+func initConfilter() error {
 	config := new(confilter.ConfilterConfig)
-	dicts := make(map[string]string)
-	dicts["aaa"] = "../data/aaa.txt"
-	dicts["bbb"] = "../data/bbb.txt"
-	config.Dictionaries = dicts
+	config.Dictionaries = cfgDictionaries
 
 	confilterObj, err := confilter.CreateConfilter(config)
 	if nil != err {
-		logger.Errorf("error when create confilter:%s", err)
-		os.Exit(1)
+		return err
+	} else {
+		c = confilterObj
 	}
-	c = confilterObj
+
+	return nil
 }
 
-func initHttp() {
+func initHttp() error {
 	http.HandleFunc("/api/confilter/judge", JudgeHandler)
+	return http.ListenAndServe(cfgListenAddr, nil)
 }
