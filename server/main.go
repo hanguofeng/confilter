@@ -38,6 +38,7 @@ func JudgeHandler(res http.ResponseWriter, req *http.Request) {
 func main() {
 	var err error
 
+	flag.Parse()
 	initLogger()
 
 	err = initConfig()
